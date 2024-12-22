@@ -13,6 +13,8 @@ use crate::{ActorSystem, Message, Pid, SendError};
 use crate::remote::message_handler::RemoteMessageHandler;
 use crate::remote::errors::RemoteError;
 use crate::remote::system_message::SystemMessage;
+use std::net::SocketAddr;
+use tokio::net::{TcpListener, TcpStream};
 
 pub struct RemoteConfig {
     pub host: String,
@@ -20,53 +22,37 @@ pub struct RemoteConfig {
     pub serializer: Box<dyn Serializer>,
 }
 
-pub struct Remote {
-    system: Arc<ActorSystem>,
+pub struct RemoteContext {
     config: RemoteConfig,
-    endpoints: DashMap<String, Arc<RemoteEndpoint>>,
-    transport: Arc<RwLock<Box<dyn Transport>>>,
+    connections: Arc<DashMap<String, RemoteEndpoint>>,
 }
 
-impl Remote {
-    pub fn new(system: Arc<ActorSystem>, config: RemoteConfig) -> Self {
-        Self {
-            system,
+impl RemoteContext {
+    pub async fn new(config: RemoteConfig) -> Result<Self, std::io::Error> {
+        let ctx = Self {
             config,
-            endpoints: DashMap::new(),
-            transport: Arc::new(RwLock::new(Box::new(TcpTransport::new()))),
-        }
+            connections: Arc::new(DashMap::new()),
+        };
+
+        ctx.start_server().await?;
+        Ok(ctx)
     }
 
-    pub async fn start(&self) -> Result<(), RemoteError> {
-        let transport = self.transport.read().await;
-        transport.start(&self.config).await
+    pub async fn send(&self, target: &Pid, msg: Message) -> Result<(), SendError> {
+        let endpoint = self.get_or_connect_endpoint(&target.address).await?;
+        endpoint.send(target, msg).await
     }
 
-    pub async fn send(&self, target: &Pid, message: Message) -> Result<(), SendError> {
-        if let Some(endpoint) = self.endpoints.get(&target.address) {
-            endpoint.send(target, message).await
-        } else {
-            let endpoint = RemoteEndpoint::new(
-                target.address.clone(),
-                Arc::clone(&self.system),
-                Arc::clone(&self.transport),
-            );
-            self.endpoints.insert(target.address.clone(), Arc::new(endpoint));
-            endpoint.send(target, message).await
-        }
-    }
+    async fn start_server(&self) -> Result<(), std::io::Error> {
+        let addr = format!("{}:{}", self.config.host, self.config.port);
+        let listener = TcpListener::bind(addr).await?;
 
-    pub async fn handle_remote_message(&self, envelope: MessageEnvelope) -> Result<(), RemoteError> {
-        let handler = RemoteMessageHandler::new(Arc::clone(&self.system));
-        handler.handle_envelope(envelope).await
-    }
+        tokio::spawn(async move {
+            while let Ok((stream, _)) = listener.accept().await {
+                self.handle_connection(stream).await;
+            }
+        });
 
-    pub async fn handle_remote_system_message(&self, message: SystemMessage) -> Result<(), RemoteError> {
-        let handler = RemoteMessageHandler::new(Arc::clone(&self.system));
-        handler.handle_system_message(message).await
-    }
-
-    pub fn endpoint_manager(&self) -> &EndpointManager {
-        &self.endpoint_manager
+        Ok(())
     }
 } 

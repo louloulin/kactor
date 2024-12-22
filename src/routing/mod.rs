@@ -1,100 +1,108 @@
 use std::sync::Arc;
-use crate::{Actor, Context, Message, Pid, SendError, Props};
 use dashmap::DashMap;
+use crate::{Actor, Context, Message, Pid, SendError};
 
-pub mod strategies;
-pub use strategies::*;
-
-#[derive(Debug, Clone, Copy)]
-pub enum RouterKind {
-    Broadcast,    // 广播到所有 routee
-    Random,       // 随机选择 routee
-    RoundRobin,   // 轮询选择 routee
-    Consistent,   // 一致性哈希
-    SmallestMailbox, // 选择邮箱最小的 routee
+pub enum RoutingStrategy {
+    RoundRobin,
+    Random,
+    ConsistentHash,
+    LeastBusy,
+    Broadcast,
 }
 
 pub struct Router {
-    kind: RouterKind,
+    strategy: RoutingStrategy,
     routees: Arc<DashMap<String, Pid>>,
-    strategy: Box<dyn RoutingStrategy>,
-}
-
-#[async_trait::async_trait]
-pub trait RoutingStrategy: Send + Sync {
-    async fn route(&self, message: &Message, routees: &DashMap<String, Pid>) -> Vec<Pid>;
-    fn add_routee(&mut self, pid: Pid);
-    fn remove_routee(&mut self, pid: &Pid);
+    state: Arc<RouterState>,
 }
 
 impl Router {
-    pub fn new(kind: RouterKind) -> Self {
-        let strategy: Box<dyn RoutingStrategy> = match kind {
-            RouterKind::Broadcast => Box::new(BroadcastStrategy::new()),
-            RouterKind::Random => Box::new(RandomStrategy::new()),
-            RouterKind::RoundRobin => Box::new(RoundRobinStrategy::new()),
-            RouterKind::Consistent => Box::new(ConsistentHashStrategy::new()),
-            RouterKind::SmallestMailbox => Box::new(SmallestMailboxStrategy::new()),
-        };
-
+    pub fn new(strategy: RoutingStrategy) -> Self {
         Self {
-            kind,
-            routees: Arc::new(DashMap::new()),
             strategy,
+            routees: Arc::new(DashMap::new()),
+            state: Arc::new(RouterState::new()),
         }
     }
 
-    pub fn with_routees(mut self, routees: Vec<Pid>) -> Self {
-        for routee in routees {
-            self.add_routee(routee);
-        }
-        self
+    pub fn add_routee(&self, pid: Pid) {
+        self.routees.insert(pid.id.clone(), pid);
     }
 
-    pub fn add_routee(&mut self, pid: Pid) {
-        self.routees.insert(pid.id.clone(), pid.clone());
-        self.strategy.add_routee(pid);
-    }
-
-    pub fn remove_routee(&mut self, pid: &Pid) {
+    pub fn remove_routee(&self, pid: &Pid) {
         self.routees.remove(&pid.id);
-        self.strategy.remove_routee(pid);
     }
 
-    pub async fn route(&self, message: &Message) -> Result<(), SendError> {
-        let targets = self.strategy.route(message, &self.routees).await;
-        
-        match message {
-            Message::BroadcastMessage(msg) => {
-                for target in targets {
-                    if let Err(err) = target.send(msg.as_ref().clone()).await {
-                        log::error!("Failed to broadcast message to {}: {:?}", target.id, err);
-                    }
-                }
-                Ok(())
+    pub async fn route(&self, msg: Message) -> Result<(), SendError> {
+        match self.strategy {
+            RoutingStrategy::RoundRobin => {
+                self.route_round_robin(msg).await
             }
-            Message::RouteMessage { message, .. } => {
-                if let Some(target) = targets.first() {
-                    target.send(message.as_ref().clone()).await
-                } else {
-                    Err(SendError::NoRoutee)
-                }
+            RoutingStrategy::Random => {
+                self.route_random(msg).await
             }
-            _ => {
-                if let Some(target) = targets.first() {
-                    target.send(message.clone()).await
-                } else {
-                    Err(SendError::NoRoutee)
-                }
+            RoutingStrategy::ConsistentHash => {
+                self.route_consistent_hash(msg).await
+            }
+            RoutingStrategy::LeastBusy => {
+                self.route_least_busy(msg).await
+            }
+            RoutingStrategy::Broadcast => {
+                self.route_broadcast(msg).await
             }
         }
     }
 
-    pub fn get_routees(&self) -> Vec<Pid> {
-        self.routees.iter().map(|entry| entry.value().clone()).collect()
+    async fn route_round_robin(&self, msg: Message) -> Result<(), SendError> {
+        let next = self.state.next_round_robin(self.routees.len());
+        if let Some(routee) = self.routees.iter().nth(next) {
+            routee.send(msg).await
+        } else {
+            Err(SendError::NoRoutee)
+        }
     }
 
-    pub fn routee_count(&self) -> usize {
-        self.routees.len()
+    async fn route_random(&self, msg: Message) -> Result<(), SendError> {
+        use rand::seq::SliceRandom;
+        let routees: Vec<_> = self.routees.iter().collect();
+        if let Some(routee) = routees.choose(&mut rand::thread_rng()) {
+            routee.send(msg).await
+        } else {
+            Err(SendError::NoRoutee)
+        }
+    }
+
+    async fn route_consistent_hash(&self, msg: Message) -> Result<(), SendError> {
+        let hash = msg.hash();
+        let routees: Vec<_> = self.routees.iter().collect();
+        let idx = hash as usize % routees.len();
+        if let Some(routee) = routees.get(idx) {
+            routee.send(msg).await
+        } else {
+            Err(SendError::NoRoutee)
+        }
+    }
+
+    async fn route_least_busy(&self, msg: Message) -> Result<(), SendError> {
+        let least_busy = self.state.get_least_busy_routee(&self.routees);
+        if let Some(routee) = least_busy {
+            routee.send(msg).await
+        } else {
+            Err(SendError::NoRoutee)
+        }
+    }
+
+    async fn route_broadcast(&self, msg: Message) -> Result<(), SendError> {
+        let mut errors = Vec::new();
+        for routee in self.routees.iter() {
+            if let Err(e) = routee.send(msg.clone()).await {
+                errors.push(e);
+            }
+        }
+        if errors.is_empty() {
+            Ok(())
+        } else {
+            Err(SendError::BroadcastFailed(errors))
+        }
     }
 } 

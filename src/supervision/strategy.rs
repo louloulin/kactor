@@ -1,39 +1,33 @@
 use async_trait::async_trait;
 use std::time::Duration;
-use crate::{Context, Pid, ProtoError};
+use crate::{Actor, Context, SendError};
 
 #[async_trait]
 pub trait SupervisorStrategy: Send + Sync {
     async fn handle_failure(
         &self,
-        ctx: &mut Context,
-        pid: &Pid,
-        reason: &ProtoError,
-        stats: &ChildStats,
+        ctx: &Context,
+        reason: &str,
+        failures: usize,
     ) -> SupervisorDirective;
 }
 
 #[derive(Debug, Clone, Copy)]
 pub enum SupervisorDirective {
-    Resume,
-    Restart,
-    Stop,
-    Escalate,
+    Resume,    // 继续处理消息
+    Restart,   // 重启 Actor
+    Stop,      // 停止 Actor
+    Escalate,  // 上报给父 Actor
 }
 
-#[derive(Clone)]
 pub struct OneForOneStrategy {
-    max_retries: i32,
+    max_retries: usize,
     within_time: Duration,
-    directive: fn(&ProtoError) -> SupervisorDirective,
+    directive: SupervisorDirective,
 }
 
 impl OneForOneStrategy {
-    pub fn new(
-        max_retries: i32,
-        within_time: Duration,
-        directive: fn(&ProtoError) -> SupervisorDirective,
-    ) -> Self {
+    pub fn new(max_retries: usize, within_time: Duration, directive: SupervisorDirective) -> Self {
         Self {
             max_retries,
             within_time,
@@ -46,114 +40,37 @@ impl OneForOneStrategy {
 impl SupervisorStrategy for OneForOneStrategy {
     async fn handle_failure(
         &self,
-        ctx: &mut Context,
-        pid: &Pid,
-        reason: &ProtoError,
-        stats: &ChildStats,
+        ctx: &Context,
+        reason: &str,
+        failures: usize,
     ) -> SupervisorDirective {
-        if stats.failure_count > self.max_retries {
+        if failures > self.max_retries {
             SupervisorDirective::Stop
         } else {
-            (self.directive)(reason)
+            self.directive
         }
     }
 }
 
-#[derive(Clone)]
-pub struct OneForAllStrategy {
-    max_retries: i32,
-    within_time: Duration,
-    directive: fn(&ProtoError) -> SupervisorDirective,
-}
-
-impl OneForAllStrategy {
-    pub fn new(
-        max_retries: i32,
-        within_time: Duration,
-        directive: fn(&ProtoError) -> SupervisorDirective,
-    ) -> Self {
-        Self {
-            max_retries,
-            within_time,
-            directive,
-        }
-    }
-}
-
-#[async_trait]
-impl SupervisorStrategy for OneForAllStrategy {
-    async fn handle_failure(
-        &self,
-        ctx: &mut Context,
-        pid: &Pid,
-        reason: &ProtoError,
-        stats: &ChildStats,
-    ) -> SupervisorDirective {
-        if stats.failure_count > self.max_retries {
-            SupervisorDirective::Stop
-        } else {
-            let directive = (self.directive)(reason);
-            if matches!(directive, SupervisorDirective::Restart) {
-                for child_pid in ctx.children.iter() {
-                    ctx.restart_child(child_pid).await;
-                }
-            }
-            directive
-        }
-    }
-}
-
-#[derive(Clone)]
 pub struct AllForOneStrategy {
-    max_retries: i32,
+    max_retries: usize,
     within_time: Duration,
-    directive: fn(&ProtoError) -> SupervisorDirective,
-}
-
-impl AllForOneStrategy {
-    pub fn new(
-        max_retries: i32,
-        within_time: Duration,
-        directive: fn(&ProtoError) -> SupervisorDirective,
-    ) -> Self {
-        Self {
-            max_retries,
-            within_time,
-            directive,
-        }
-    }
 }
 
 #[async_trait]
 impl SupervisorStrategy for AllForOneStrategy {
     async fn handle_failure(
         &self,
-        ctx: &mut Context,
-        pid: &Pid,
-        reason: &ProtoError,
-        stats: &ChildStats,
+        ctx: &Context,
+        reason: &str,
+        failures: usize,
     ) -> SupervisorDirective {
-        if stats.failure_count > self.max_retries {
-            for child_pid in ctx.children.iter() {
-                ctx.stop_child(child_pid).await;
-            }
+        if failures > self.max_retries {
+            // 停止所有子 Actor
             SupervisorDirective::Stop
         } else {
-            let directive = (self.directive)(reason);
-            match directive {
-                SupervisorDirective::Restart => {
-                    for child_pid in ctx.children.iter() {
-                        ctx.restart_child(child_pid).await;
-                    }
-                }
-                SupervisorDirective::Stop => {
-                    for child_pid in ctx.children.iter() {
-                        ctx.stop_child(child_pid).await;
-                    }
-                }
-                _ => {}
-            }
-            directive
+            // 重启所有子 Actor
+            SupervisorDirective::Restart
         }
     }
 } 

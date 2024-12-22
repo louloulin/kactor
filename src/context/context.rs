@@ -9,6 +9,7 @@ use crate::{
     ProtoError, ChildStats, MessageQueue, QueueMessage,
     ActorCell, ActorState,
 };
+use tokio::sync::RwLock;
 
 pub struct Context {
     // Actor 和系统相关
@@ -31,7 +32,7 @@ pub struct Context {
     supervisor_strategy: Option<Box<dyn SupervisorStrategy>>,
     
     // Actor 状态
-    state: ActorState,
+    state: Arc<RwLock<ActorState>>,
     
     // 停止标志
     stopping: bool,
@@ -59,25 +60,24 @@ impl Context {
             mailbox: MessageQueue::new(),
             middleware: Vec::new(),
             supervisor_strategy: None,
-            state: ActorState::Starting,
+            state: Arc::new(RwLock::new(ActorState::Starting)),
             stopping: false,
             persistence: None,
         }
     }
 
     // Actor 生命周期管理
-    pub async fn start(&mut self) {
-        self.state = ActorState::Starting;
-        self.actor.started(self).await;
-        self.state = ActorState::Running;
+    pub async fn start(&mut self) -> Result<(), SendError> {
+        self.state.write().await.set_started();
+        self.actor.started(self).await
     }
 
-    pub async fn stop(&mut self) {
+    pub async fn stop(&mut self) -> Result<(), SendError> {
         if self.stopping {
-            return;
+            return Ok(());
         }
         self.stopping = true;
-        self.state = ActorState::Stopping;
+        self.state.write().await.set_stopping();
 
         // 停止所有子 actor
         for child in &self.children {
@@ -87,24 +87,23 @@ impl Context {
         // 通知所有观察者
         self.notify_watchers_about_stop().await;
 
-        // 停止 actor
-        self.actor.stopped(self).await;
-        self.state = ActorState::Stopped;
+        self.actor.stopping(self).await?;
+        self.actor.stopped(self).await?;
+        self.state.write().await.set_stopped();
 
         // 从系统中移除
         self.system.process_registry.remove(&self.self_pid.id);
+
+        Ok(())
     }
 
-    pub async fn restart(&mut self) {
-        self.state = ActorState::Restarting;
+    pub async fn restart(&mut self, reason: &str) -> Result<(), SendError> {
+        self.state.write().await.set_restarting();
+        self.actor.restarting(self, reason).await?;
         
-        // 停止
-        self.actor.stopped(self).await;
-        
-        // 重新启动
-        self.actor.started(self).await;
-        
-        self.state = ActorState::Running;
+        // 重新初始化 Actor
+        self.actor = self.props.producer();
+        self.start().await
     }
 
     // 消息处理
@@ -122,7 +121,7 @@ impl Context {
     }
 
     async fn handle_message(&mut self, msg: Message) {
-        if self.state != ActorState::Running {
+        if self.state.read().await.is_stopping() {
             return;
         }
 
@@ -136,14 +135,23 @@ impl Context {
         }
     }
 
-    async fn handle_system_message(&mut self, msg: SystemMessage) {
+    async fn handle_system_message(&mut self, msg: SystemMessage) -> Result<(), SendError> {
         match msg {
             SystemMessage::Stop => self.stop().await,
-            SystemMessage::Restart => self.restart().await,
-            SystemMessage::Watch(pid) => self.watchers.insert(pid),
-            SystemMessage::Unwatch(pid) => self.watchers.remove(&pid),
-            SystemMessage::Terminated(pid) => self.handle_terminated(pid).await,
-            _ => {}
+            SystemMessage::Restart { reason } => self.restart(&reason).await,
+            SystemMessage::Terminated(pid) => {
+                self.children.remove(&pid);
+                Ok(())
+            }
+            SystemMessage::Watch(pid) => {
+                self.watchers.insert(pid);
+                Ok(())
+            }
+            SystemMessage::Unwatch(pid) => {
+                self.watchers.remove(&pid);
+                Ok(())
+            }
+            _ => Ok(()),
         }
     }
 
@@ -178,8 +186,8 @@ impl Context {
             ).await;
 
             match directive {
-                SupervisorDirective::Resume => self.state = ActorState::Running,
-                SupervisorDirective::Restart => self.restart().await,
+                SupervisorDirective::Resume => self.state.write().await.set_running(),
+                SupervisorDirective::Restart => self.restart(&error.to_string()).await,
                 SupervisorDirective::Stop => self.stop().await,
                 SupervisorDirective::Escalate => {
                     if let Some(ref parent) = self.parent {
@@ -216,7 +224,7 @@ impl Context {
     }
 
     pub fn state(&self) -> ActorState {
-        self.state
+        self.state.read().await.state
     }
 
     pub fn is_stopping(&self) -> bool {
