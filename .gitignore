@@ -1,0 +1,69 @@
+# Rust 相关
+/target/
+**/*.rs.bk
+Cargo.lock
+
+# IDE - VSCode
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+*.code-workspace
+.history/
+
+# IDE - IntelliJ IDEA
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# 依赖目录
+/vendor/
+
+# 编译产物
+*.o
+*.so
+*.dylib
+*.dll
+*.exe
+
+# 调试文件
+*.pdb
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# 日志文件
+*.log
+logs/
+
+# 临时文件
+*.swp
+*.swo
+*~
+*.tmp
+*.bak
+
+# 环境文件
+.env
+.env.local
+.env.*.local
+
+# 文档生成
+/doc/
+/docs/_build/
+/target/doc/
+
+# 测试覆盖率报告
+/coverage/
+*.profraw
+
+# Benchmark 结果
+/benches/target/
+
+# 自定义忽略
+/local/
+/notes/
+TODO.md 
