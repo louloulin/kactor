@@ -1,8 +1,0 @@
-D:\workspace\actor\protoactor-rust\target\debug\deps\libasync_stream-31b0bc7bedbfd71f.rmeta: C:\Users\Administrator\.cargo\registry\src\mirrors.tuna.tsinghua.edu.cn-df7c3c540f42cdbd\async-stream-0.3.6\src/lib.rs C:\Users\Administrator\.cargo\registry\src\mirrors.tuna.tsinghua.edu.cn-df7c3c540f42cdbd\async-stream-0.3.6\src\async_stream.rs C:\Users\Administrator\.cargo\registry\src\mirrors.tuna.tsinghua.edu.cn-df7c3c540f42cdbd\async-stream-0.3.6\src\next.rs C:\Users\Administrator\.cargo\registry\src\mirrors.tuna.tsinghua.edu.cn-df7c3c540f42cdbd\async-stream-0.3.6\src\yielder.rs
-
-D:\workspace\actor\protoactor-rust\target\debug\deps\async_stream-31b0bc7bedbfd71f.d: C:\Users\Administrator\.cargo\registry\src\mirrors.tuna.tsinghua.edu.cn-df7c3c540f42cdbd\async-stream-0.3.6\src/lib.rs C:\Users\Administrator\.cargo\registry\src\mirrors.tuna.tsinghua.edu.cn-df7c3c540f42cdbd\async-stream-0.3.6\src\async_stream.rs C:\Users\Administrator\.cargo\registry\src\mirrors.tuna.tsinghua.edu.cn-df7c3c540f42cdbd\async-stream-0.3.6\src\next.rs C:\Users\Administrator\.cargo\registry\src\mirrors.tuna.tsinghua.edu.cn-df7c3c540f42cdbd\async-stream-0.3.6\src\yielder.rs
-
-C:\Users\Administrator\.cargo\registry\src\mirrors.tuna.tsinghua.edu.cn-df7c3c540f42cdbd\async-stream-0.3.6\src/lib.rs:
-C:\Users\Administrator\.cargo\registry\src\mirrors.tuna.tsinghua.edu.cn-df7c3c540f42cdbd\async-stream-0.3.6\src\async_stream.rs:
-C:\Users\Administrator\.cargo\registry\src\mirrors.tuna.tsinghua.edu.cn-df7c3c540f42cdbd\async-stream-0.3.6\src\next.rs:
-C:\Users\Administrator\.cargo\registry\src\mirrors.tuna.tsinghua.edu.cn-df7c3c540f42cdbd\async-stream-0.3.6\src\yielder.rs:
