@@ -1,35 +1,81 @@
 use super::*;
 
-pub struct WorkflowBuilder {
-    workflow: DagWorkflow,
+pub struct DagBuilder {
+    dag: DagActor,
+    system: ActorSystem,
 }
 
-impl WorkflowBuilder {
-    pub fn new(name: String) -> Self {
+impl DagBuilder {
+    pub fn new(system: ActorSystem) -> Self {
         Self {
-            workflow: DagWorkflow::new(name),
+            dag: DagActor::new(),
+            system,
         }
     }
 
-    pub fn add_step<S: WorkflowStep + 'static>(&mut self, step: S) -> NodeIndex {
-        self.workflow.add_step(step)
+    pub async fn add_step<A>(
+        &mut self,
+        id: String,
+        actor: A,
+        dependencies: HashSet<String>
+    ) -> Result<(), WorkflowError>
+    where
+        A: ActorWorkflowStep + 'static,
+    {
+        let props = Props::new(move || Box::new(actor));
+        let pid = self.system.spawn(props).await?;
+        
+        self.dag.add_node(id, pid, dependencies);
+        Ok(())
     }
 
-    pub fn add_sub_workflow(&mut self, workflow: Workflow) -> NodeIndex {
-        self.workflow.add_sub_workflow(workflow)
+    pub fn add_dependency(&mut self, from: String, to: String) -> Result<(), WorkflowError> {
+        if let Some(node) = self.dag.nodes.get_mut(&to) {
+            node.dependencies.insert(from.clone());
+            self.dag.update_topology(&to);
+            Ok(())
+        } else {
+            Err(WorkflowError::NodeNotFound(to))
+        }
     }
 
-    pub fn add_dependency(&mut self, from: NodeIndex, to: NodeIndex) -> &mut Self {
-        self.workflow.add_dependency(from, to);
-        self
+    pub async fn build(self) -> Result<Pid, SpawnError> {
+        let props = Props::new(move || Box::new(self.dag));
+        self.system.spawn(props).await
     }
 
-    pub fn add_dependency_by_name(&mut self, from: &str, to: &str) -> Result<&mut Self, WorkflowError> {
-        self.workflow.add_dependency_by_name(from, to)?;
-        Ok(self)
-    }
+    pub async fn build_from_definition(&mut self, def: &WorkflowDefinition) -> Result<(), WorkflowError> {
+        // 创建 source actors
+        for (id, source) in &def.sources {
+            let actor = self.actor_factory.create_source_actor(
+                &source.actor,
+                &source.format,
+                &source.config
+            )?;
+            self.add_step(id.clone(), actor, HashSet::new()).await?;
+        }
 
-    pub fn build(self) -> DagWorkflow {
-        self.workflow
+        // 创建 transform actors
+        for (id, transform) in &def.transforms {
+            let actor = self.actor_factory.create_transform_actor(
+                &transform.actor,
+                &transform.config
+            )?;
+            let deps: HashSet<_> = transform.inputs.iter().cloned().collect();
+            self.add_step(id.clone(), actor, deps).await?;
+        }
+
+        // 创建 sink actors
+        for (id, sink) in &def.sinks {
+            let actor = self.actor_factory.create_sink_actor(
+                &sink.actor,
+                &sink.format,
+                &sink.config
+            )?;
+            let deps: HashSet<_> = sink.inputs.iter().cloned().collect();
+            self.add_step(id.clone(), actor, deps).await?;
+        }
+
+        Ok(())
     }
 } 

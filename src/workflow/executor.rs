@@ -1,22 +1,64 @@
 use super::*;
+use crate::{Actor, Context, Props, SystemConfig};
 use std::collections::HashMap;
 
 pub struct WorkflowExecutor {
     workflows: HashMap<String, Arc<Workflow>>,
     active_workflows: HashMap<String, WorkflowInstance>,
+    system: ActorSystem,
 }
 
 pub struct WorkflowInstance {
     workflow: Arc<Workflow>,
     context: Arc<Context>,
     state: WorkflowState,
+    coordinator_pid: Pid,
+    monitor_pid: Pid,
 }
 
 impl WorkflowExecutor {
-    pub fn new() -> Self {
+    pub fn new(config: SystemConfig) -> Self {
         Self {
             workflows: HashMap::new(),
             active_workflows: HashMap::new(),
+            system: ActorSystem::new(config),
+        }
+    }
+
+    pub async fn spawn_step_actor<A>(&self, props: Props<A>) -> Result<Pid, SpawnError> 
+    where
+        A: ActorWorkflowStep + 'static,
+    {
+        self.system.spawn(props).await
+    }
+
+    pub async fn add_actor_step<A>(
+        &mut self, 
+        workflow_name: &str,
+        step_name: String,
+        dependencies: Vec<String>,
+        actor: A
+    ) -> Result<(), WorkflowError>
+    where
+        A: ActorWorkflowStep + 'static,
+    {
+        let props = Props::new(move || Box::new(actor));
+        let pid = self.spawn_step_actor(props).await
+            .map_err(|e| WorkflowError::StepFailed(format!("Failed to spawn actor: {}", e)))?;
+
+        let step = ActorStepWrapper {
+            name: step_name,
+            dependencies,
+            actor_pid: pid,
+        };
+
+        if let Some(workflow) = self.workflows.get_mut(workflow_name) {
+            Arc::get_mut(workflow)
+                .unwrap()
+                .add_step(step);
+            Ok(())
+        } else {
+            Err(WorkflowError::NodeNotFound(workflow_name.to_string()))
         }
     }
 
@@ -33,19 +75,29 @@ impl WorkflowExecutor {
             .ok_or_else(|| WorkflowError::StepFailed(format!("Workflow not found: {}", name)))?;
         
         let instance_id = uuid::Uuid::new_v4().to_string();
+        
+        // 创建工作流协调器
+        let coordinator = WorkflowCoordinator::new((*workflow).clone());
+        let coordinator_props = Props::new(move || Box::new(coordinator));
+        let coordinator_pid = self.system.spawn(coordinator_props).await?;
+        
+        // 创建工作流监控器
+        let monitor = WorkflowMonitor::new(instance_id.clone(), Arc::new(WorkflowMetrics::new()));
+        let monitor_props = Props::new(move || Box::new(monitor));
+        let monitor_pid = self.system.spawn(monitor_props).await?;
+        
         let instance = WorkflowInstance {
             workflow: Arc::clone(workflow),
             context: ctx,
             state: WorkflowState::Created,
+            coordinator_pid,
+            monitor_pid,
         };
         
         self.active_workflows.insert(instance_id.clone(), instance);
         
         // 启动工作流
-        if let Some(instance) = self.active_workflows.get_mut(&instance_id) {
-            instance.workflow.start(&instance.context).await?;
-            instance.state = WorkflowState::Running;
-        }
+        self.system.send(&coordinator_pid, Message::StartWorkflow).await?;
         
         Ok(instance_id)
     }

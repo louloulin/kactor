@@ -2,21 +2,35 @@ use super::*;
 
 #[derive(Debug)]
 pub enum WorkflowMessage {
-    Start {
-        workflow_name: String,
-        reply_to: oneshot::Sender<Result<String, WorkflowError>>,
+    // DAG 相关消息
+    AddNode {
+        id: String,
+        actor_pid: Pid,
+        dependencies: HashSet<String>,
     },
-    Pause {
-        instance_id: String,
-        reply_to: oneshot::Sender<Result<(), WorkflowError>>,
+    RemoveNode {
+        id: String,
     },
-    Resume {
-        instance_id: String,
-        reply_to: oneshot::Sender<Result<(), WorkflowError>>,
+    AddDependency {
+        from: String,
+        to: String,
     },
-    GetState {
-        instance_id: String,
-        reply_to: oneshot::Sender<Option<WorkflowState>>,
+    RemoveDependency {
+        from: String,
+        to: String,
+    },
+    
+    // 执行控制消息
+    Execute,
+    Rollback,
+    StepCompleted {
+        step_name: String,
+        result: Result<(), WorkflowError>,
+    },
+    
+    // 监控消息
+    SetMonitor {
+        pid: Pid,
     },
 }
 
@@ -29,24 +43,28 @@ impl Actor for WorkflowManagerActor {
     async fn receive(&mut self, ctx: &Context, msg: Message) -> Result<(), SendError> {
         if let Some(workflow_msg) = msg.downcast_ref::<WorkflowMessage>() {
             match workflow_msg {
-                WorkflowMessage::Start { workflow_name, reply_to } => {
-                    let result = self.executor.start_workflow(
-                        workflow_name,
-                        Arc::new(ctx.clone())
-                    ).await;
-                    let _ = reply_to.send(result);
+                WorkflowMessage::Execute => {
+                    let result = self.executor.execute_step().await;
+                    let _ = ctx.send(Message::Execute).await;
                 }
-                WorkflowMessage::Pause { instance_id, reply_to } => {
-                    let result = self.executor.pause_workflow(instance_id).await;
-                    let _ = reply_to.send(result);
+                WorkflowMessage::Rollback => {
+                    let result = self.executor.rollback_step().await;
+                    let _ = ctx.send(Message::Rollback).await;
                 }
-                WorkflowMessage::Resume { instance_id, reply_to } => {
-                    let result = self.executor.resume_workflow(instance_id).await;
-                    let _ = reply_to.send(result);
+                WorkflowMessage::StepCompleted { step_name, result } => {
+                    let _ = ctx.send(Message::StepCompleted { step_name, result }).await;
                 }
-                WorkflowMessage::GetState { instance_id, reply_to } => {
-                    let state = self.executor.get_workflow_state(instance_id);
-                    let _ = reply_to.send(state);
+                WorkflowMessage::PauseWorkflow => {
+                    let result = self.executor.pause_workflow().await;
+                    let _ = ctx.send(Message::PauseWorkflow).await;
+                }
+                WorkflowMessage::ResumeWorkflow => {
+                    let result = self.executor.resume_workflow().await;
+                    let _ = ctx.send(Message::ResumeWorkflow).await;
+                }
+                WorkflowMessage::CancelWorkflow => {
+                    let result = self.executor.cancel_workflow().await;
+                    let _ = ctx.send(Message::CancelWorkflow).await;
                 }
             }
         }
