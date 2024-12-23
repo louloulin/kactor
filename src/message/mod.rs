@@ -1,20 +1,29 @@
+mod batch;
 mod envelope;
+mod queue;
 mod system_message;
 
-pub use envelope::MessageEnvelope;
+use std::any::Any;
+use crate::actor::ActorRef;
+
+pub use batch::MessageBatch;
+pub use envelope::Envelope;
+pub use queue::MessageQueue;
 pub use system_message::SystemMessage;
 
-use std::any::Any;
-use crate::Pid;
-
+/// Represents a message that can be sent to an actor
 #[derive(Clone)]
 pub struct Message {
+    /// The actual message payload
     pub payload: Box<dyn Any + Send>,
-    pub sender: Option<Pid>,
-    pub header: Option<MessageHeader>,
+    /// The sender of this message
+    pub sender: Option<ActorRef>,
+    /// Message headers/metadata
+    pub header: Option<Box<dyn Any + Send>>,
 }
 
 impl Message {
+    /// Creates a new message
     pub fn new<T: Any + Send>(payload: T) -> Self {
         Self {
             payload: Box::new(payload),
@@ -23,44 +32,26 @@ impl Message {
         }
     }
 
-    pub fn with_sender(mut self, sender: Pid) -> Self {
-        self.sender = Some(sender);
-        self
+    /// Creates a new message with a sender
+    pub fn with_sender<T: Any + Send>(payload: T, sender: ActorRef) -> Self {
+        Self {
+            payload: Box::new(payload),
+            sender: Some(sender),
+            header: None,
+        }
     }
 
-    pub fn with_header(mut self, header: MessageHeader) -> Self {
-        self.header = Some(header);
-        self
-    }
-
-    pub fn downcast<T: Any>(&self) -> Result<&T, &dyn Any> {
-        self.payload.downcast_ref::<T>().ok_or(&*self.payload)
+    /// Creates a system stop message
+    pub(crate) fn system_stop() -> Self {
+        Self::new(SystemMessage::Stop)
     }
 }
 
-#[derive(Default, Clone)]
-pub struct MessageHeader {
-    headers: dashmap::DashMap<String, String>,
-}
-
-impl MessageHeader {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    pub fn get(&self, key: &str) -> Option<String> {
-        self.headers.get(key).map(|v| v.clone())
-    }
-
-    pub fn set(&self, key: String, value: String) {
-        self.headers.insert(key, value);
-    }
-
-    pub fn remove(&self, key: &str) -> Option<String> {
-        self.headers.remove(key).map(|(_, v)| v)
-    }
-
-    pub fn clear(&self) {
-        self.headers.clear();
+impl std::fmt::Debug for Message {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Message")
+            .field("sender", &self.sender)
+            .field("has_header", &self.header.is_some())
+            .finish()
     }
 } 

@@ -1,21 +1,26 @@
-#[async_trait]
-pub trait SinkActor: Actor {
-    // 批量写入支持
-    async fn write_batch(&mut self, batch: Vec<Message>) -> Result<(), WorkflowError>;
-    
-    // 事务支持
-    async fn begin_transaction(&mut self) -> Result<TransactionId, WorkflowError>;
-    async fn commit_transaction(&mut self, tx_id: TransactionId) -> Result<(), WorkflowError>;
-    async fn rollback_transaction(&mut self, tx_id: TransactionId) -> Result<(), WorkflowError>;
-    
-    // 健康检查
-    async fn health_check(&self) -> Result<bool, WorkflowError>;
+use crate::actor::{Actor, Context};
+use crate::message::Message;
+use crate::workflow::SinkConfig;
+use async_trait::async_trait;
+
+#[derive(Debug)]
+pub struct SinkActor {
+    pub name: String,
+    pub sink_config: SinkConfig,
 }
 
-pub struct PostgresSinkActor {
-    config: SinkConfig,
-    batch_buffer: Vec<Message>,
-    current_transaction: Option<TransactionId>,
-    metrics: Arc<SinkMetrics>,
-    connection_pool: Pool,
+impl SinkActor {
+    pub fn new(name: String, sink_config: SinkConfig) -> Self {
+        Self { name, sink_config }
+    }
+}
+
+#[async_trait]
+impl Actor for SinkActor {
+    async fn receive(&self, ctx: &Context, msg: Message) {
+        // 实现数据写入逻辑
+        // 1. 从消息中提取数据
+        // 2. 根据配置写入目标系统
+        // 3. 处理重试逻辑
+    }
 } 

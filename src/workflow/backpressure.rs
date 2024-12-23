@@ -47,4 +47,22 @@ impl BackpressureController {
             let _ = self.throttle_sender.try_send(ThrottleCommand::Resume);
         }
     }
+
+    pub fn update_watermarks(&mut self, high: f64, low: f64) {
+        assert!(high > low && high <= 1.0 && low >= 0.0);
+        self.high_watermark = high;
+        self.low_watermark = low;
+    }
+
+    pub fn get_buffer_size(&self) -> usize {
+        self.current_buffer_size.load(Ordering::Relaxed)
+    }
+
+    pub fn get_utilization(&self) -> f64 {
+        self.get_buffer_size() as f64 / self.max_buffer_size as f64
+    }
+
+    pub fn is_backpressured(&self) -> bool {
+        self.get_utilization() >= self.high_watermark
+    }
 } 

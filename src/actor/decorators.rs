@@ -1,5 +1,9 @@
 use std::time::Duration;
 use tokio::time::sleep;
+use async_trait::async_trait;
+use super::Actor;
+use crate::context::Context;
+use crate::message::Message;
 
 pub struct ThrottleDecorator<A: Actor> {
     inner: A,

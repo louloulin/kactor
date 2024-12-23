@@ -11,32 +11,24 @@ pub use decorators::{ThrottleDecorator, RetryDecorator};
 pub use props::Props;
 
 use async_trait::async_trait;
-use crate::{Context, Message, SystemMessage};
+use crate::context::Context;
+use crate::errors::SendError;
+use crate::message::Message;
 
 #[async_trait]
 pub trait Actor: Send + 'static {
-    /// Called when actor is started
-    async fn started(&mut self, ctx: &mut Context) {}
-    
-    /// Called when actor is stopped
-    async fn stopped(&mut self, ctx: &mut Context) {}
-    
-    /// Handle incoming message
-    async fn receive(&mut self, ctx: &mut Context, msg: Message);
+    async fn receive(&mut self, ctx: &Context, msg: Message) -> Result<(), SendError>;
 
-    /// Handle system messages
-    async fn system_receive(&mut self, ctx: &mut Context, msg: SystemMessage) {
-        match msg {
-            SystemMessage::Stop => {
-                self.stopped(ctx).await;
-                ctx.stop();
-            }
-            SystemMessage::Restart => {
-                self.stopped(ctx).await;
-                self.started(ctx).await;
-            }
-            _ => {}
-        }
+    async fn started(&mut self, _ctx: &Context) -> Result<(), SendError> {
+        Ok(())
+    }
+
+    async fn stopping(&mut self, _ctx: &Context) -> Result<(), SendError> {
+        Ok(())
+    }
+
+    async fn stopped(&mut self, _ctx: &Context) -> Result<(), SendError> {
+        Ok(())
     }
 }
 

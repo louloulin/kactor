@@ -1,25 +1,51 @@
 use metrics::{Counter, Gauge, Histogram};
 use std::sync::Arc;
+use std::time::Duration;
+
+#[derive(Clone)]
+pub struct SourceMetrics {
+    pub records_read: Counter,
+    pub bytes_read: Counter,
+    pub read_latency: Histogram,
+    pub current_lag: Gauge,
+    pub errors: Counter,
+}
+
+#[derive(Clone)]
+pub struct TransformMetrics {
+    pub records_processed: Counter,
+    pub processing_time: Histogram,
+    pub memory_usage: Gauge,
+    pub errors: Counter,
+}
+
+#[derive(Clone)]
+pub struct SinkMetrics {
+    pub records_written: Counter,
+    pub bytes_written: Counter,
+    pub write_latency: Histogram,
+    pub errors: Counter,
+}
+
+impl SourceMetrics {
+    pub fn new(prefix: &str) -> Self {
+        Self {
+            records_read: Counter::new(format!("{}_records_read_total", prefix)),
+            bytes_read: Counter::new(format!("{}_bytes_read_total", prefix)),
+            read_latency: Histogram::new(format!("{}_read_latency_seconds", prefix)),
+            current_lag: Gauge::new(format!("{}_current_lag", prefix)),
+            errors: Counter::new(format!("{}_errors_total", prefix)),
+        }
+    }
+}
 
 pub struct WorkflowMetrics {
     // Source 指标
-    pub source_records_read: Counter,
-    pub source_bytes_read: Counter,
-    pub source_lag: Gauge,
-    pub source_errors: Counter,
-    
+    pub source_metrics: SourceMetrics,
     // Transform 指标
-    pub transform_records_processed: Counter,
-    pub transform_processing_time: Histogram,
-    pub transform_errors: Counter,
-    pub transform_backpressure: Gauge,
-    
+    pub transform_metrics: TransformMetrics,
     // Sink 指标
-    pub sink_records_written: Counter,
-    pub sink_bytes_written: Counter,
-    pub sink_latency: Histogram,
-    pub sink_errors: Counter,
-    
+    pub sink_metrics: SinkMetrics,
     // 整体指标
     pub end_to_end_latency: Histogram,
     pub workflow_throughput: Gauge,
@@ -27,47 +53,31 @@ pub struct WorkflowMetrics {
 }
 
 impl WorkflowMetrics {
-    pub fn new() -> Self {
+    pub fn new(workflow_id: &str) -> Self {
         Self {
-            source_records_read: Counter::new("source_records_read_total"),
-            source_bytes_read: Counter::new("source_bytes_read_total"),
-            source_lag: Gauge::new("source_lag_seconds"),
-            source_errors: Counter::new("source_errors_total"),
-            transform_records_processed: Counter::new("transform_records_processed_total"),
-            transform_processing_time: Histogram::new("transform_processing_time_seconds"),
-            transform_errors: Counter::new("transform_errors_total"),
-            transform_backpressure: Gauge::new("transform_backpressure"),
-            sink_records_written: Counter::new("sink_records_written_total"),
-            sink_bytes_written: Counter::new("sink_bytes_written_total"),
-            sink_latency: Histogram::new("sink_latency_seconds"),
-            sink_errors: Counter::new("sink_errors_total"),
-            end_to_end_latency: Histogram::new("end_to_end_latency_seconds"),
-            workflow_throughput: Gauge::new("workflow_throughput"),
-            memory_usage: Gauge::new("memory_usage"),
+            source_metrics: SourceMetrics::new(&format!("{}_source", workflow_id)),
+            transform_metrics: TransformMetrics::new(&format!("{}_transform", workflow_id)),
+            sink_metrics: SinkMetrics::new(&format!("{}_sink", workflow_id)),
+            end_to_end_latency: Histogram::new(&format!("{}_latency", workflow_id)),
+            workflow_throughput: Gauge::new(&format!("{}_throughput", workflow_id)),
+            memory_usage: Gauge::new(&format!("{}_memory", workflow_id)),
         }
     }
 
-    pub fn workflow_started(&self, workflow_id: String) {
-        self.workflows_started.increment(1);
-        self.active_workflows.increment();
+    pub fn record_source_metrics(&self, records: u64, bytes: u64, latency: Duration) {
+        self.source_metrics.records_read.increment(records);
+        self.source_metrics.bytes_read.increment(bytes);
+        self.source_metrics.current_lag.set(latency.as_secs_f64());
     }
 
-    pub fn workflow_completed(&self, workflow_id: String, status: WorkflowState, duration: Duration) {
-        match status {
-            WorkflowState::Completed => self.workflows_completed.increment(1),
-            WorkflowState::Failed => self.workflows_failed.increment(1),
-            _ => {}
-        }
-        self.active_workflows.decrement();
-        self.workflow_duration.record(duration.as_secs_f64());
+    pub fn record_transform_metrics(&self, records: u64, processing_time: Duration) {
+        self.transform_metrics.records_processed.increment(records);
+        self.transform_metrics.processing_time.record(processing_time.as_secs_f64());
     }
 
-    pub fn step_started(&self, workflow_id: String, step_name: &str) {
-        self.active_steps.increment();
-    }
-
-    pub fn step_completed(&self, workflow_id: String, step_name: &str, duration: Duration) {
-        self.active_steps.decrement();
-        self.step_duration.record(duration.as_secs_f64());
+    pub fn record_sink_metrics(&self, records: u64, bytes: u64, latency: Duration) {
+        self.sink_metrics.records_written.increment(records);
+        self.sink_metrics.bytes_written.increment(bytes);
+        self.sink_metrics.write_latency.record(latency.as_secs_f64());
     }
 } 

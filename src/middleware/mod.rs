@@ -1,15 +1,18 @@
+mod message_middleware;
+
 use async_trait::async_trait;
-use std::sync::Arc;
-use crate::{Actor, Context, Message, SendError};
+use futures::future::BoxFuture;
+use crate::context::Context;
+use crate::message::Message;
+use crate::errors::SendError;
+
+pub use message_middleware::LoggingMiddleware;
+
+pub type Next<'a> = Box<dyn FnOnce(&mut Context, Message) -> BoxFuture<'a, Result<(), SendError>> + Send + 'a>;
 
 #[async_trait]
 pub trait Middleware: Send + Sync {
-    async fn handle<A: Actor>(
-        &self,
-        ctx: &mut Context,
-        msg: Message,
-        next: Arc<dyn Fn(Message) -> Result<(), SendError> + Send + Sync>,
-    ) -> Result<(), SendError>;
+    async fn handle(&self, ctx: &mut Context, msg: Message, next: Next<'_>) -> Result<(), SendError>;
 }
 
 pub struct MiddlewareChain {
@@ -27,21 +30,21 @@ impl MiddlewareChain {
         self.middlewares.push(Box::new(middleware));
     }
 
-    pub async fn execute(
-        &self,
-        ctx: &mut Context,
-        msg: Message,
-    ) -> Result<(), SendError> {
-        let mut chain = self.middlewares.iter();
-        
-        let next = move |msg: Message| {
-            if let Some(middleware) = chain.next() {
-                middleware.handle(ctx, msg, Arc::new(next))
-            } else {
-                ctx.actor.receive(ctx, msg)
-            }
-        };
+    pub async fn execute(&self, ctx: &mut Context, msg: Message) -> Result<(), SendError> {
+        fn make_next<'a>(
+            chain: &'a mut std::slice::Iter<'a, Box<dyn Middleware>>,
+        ) -> Next<'a> {
+            Box::new(move |ctx, msg| {
+                Box::pin(async move {
+                    match chain.next() {
+                        Some(middleware) => middleware.handle(ctx, msg, make_next(chain)).await,
+                        None => ctx.receive(msg).await
+                    }
+                })
+            })
+        }
 
-        next(msg).await
+        let mut chain = self.middlewares.iter();
+        make_next(&mut chain)(ctx, msg).await
     }
 } 

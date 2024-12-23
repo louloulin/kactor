@@ -1,37 +1,36 @@
 use tokio::sync::mpsc;
-use crate::{Message, SystemMessage};
+use super::Message;
 
-pub enum QueueMessage {
-    User(Message),
-    System(SystemMessage),
-}
-
+/// A message queue for actors
 pub struct MessageQueue {
-    sender: mpsc::UnboundedSender<QueueMessage>,
-    receiver: mpsc::UnboundedReceiver<QueueMessage>,
+    sender: mpsc::Sender<Message>,
+    receiver: mpsc::Receiver<Message>,
+    capacity: usize,
 }
 
 impl MessageQueue {
-    pub fn new() -> Self {
-        let (sender, receiver) = mpsc::unbounded_channel();
-        Self { sender, receiver }
+    /// Creates a new message queue with the given capacity
+    pub fn new(capacity: usize) -> Self {
+        let (sender, receiver) = mpsc::channel(capacity);
+        Self {
+            sender,
+            receiver,
+            capacity,
+        }
     }
 
-    pub fn sender(&self) -> mpsc::UnboundedSender<QueueMessage> {
+    /// Returns the sender half of the queue
+    pub fn sender(&self) -> mpsc::Sender<Message> {
         self.sender.clone()
     }
 
-    pub async fn receive(&mut self) -> Option<QueueMessage> {
-        self.receiver.recv().await
+    /// Returns the receiver half of the queue
+    pub fn receiver(&mut self) -> &mut mpsc::Receiver<Message> {
+        &mut self.receiver
     }
 
-    pub fn try_send(&self, msg: QueueMessage) -> Result<(), mpsc::error::SendError<QueueMessage>> {
-        self.sender.send(msg)
-    }
-}
-
-impl Default for MessageQueue {
-    fn default() -> Self {
-        Self::new()
+    /// Returns the capacity of the queue
+    pub fn capacity(&self) -> usize {
+        self.capacity
     }
 } 

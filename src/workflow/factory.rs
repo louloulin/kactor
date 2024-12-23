@@ -1,66 +1,28 @@
-use super::*;
-use std::collections::HashMap;
+use async_trait::async_trait;
+use crate::actor::Actor;
+use crate::workflow::definition::{SourceDefinition, TransformDefinition, SinkDefinition};
+use crate::errors::WorkflowError;
 
 #[async_trait]
 pub trait ActorFactory: Send + Sync {
-    fn create_source_actor(
-        &self,
-        actor_type: &str,
-        format: &str,
-        config: &SourceConfig
-    ) -> Result<Box<dyn Actor>, WorkflowError>;
-
-    fn create_transform_actor(
-        &self,
-        actor_type: &str,
-        config: &TransformConfig
-    ) -> Result<Box<dyn Actor>, WorkflowError>;
-
-    fn create_sink_actor(
-        &self,
-        actor_type: &str,
-        format: &str,
-        config: &SinkConfig
-    ) -> Result<Box<dyn Actor>, WorkflowError>;
-
-    fn create_system(&self) -> ActorSystem;
+    async fn create_source(&self, def: &SourceDefinition) -> Result<Box<dyn Actor>, WorkflowError>;
+    async fn create_transform(&self, def: &TransformDefinition) -> Result<Box<dyn Actor>, WorkflowError>;
+    async fn create_sink(&self, def: &SinkDefinition) -> Result<Box<dyn Actor>, WorkflowError>;
 }
 
-pub struct DefaultActorFactory {
-    system_config: SystemConfig,
-    actor_builders: HashMap<String, Box<dyn Fn(&StepConfig) -> Box<dyn Actor> + Send + Sync>>,
-}
-
-impl DefaultActorFactory {
-    pub fn new(system_config: SystemConfig) -> Self {
-        Self {
-            system_config,
-            actor_builders: HashMap::new(),
-        }
-    }
-
-    pub fn register<F>(&mut self, actor_type: &str, builder: F)
-    where
-        F: Fn(&StepConfig) -> Box<dyn Actor> + Send + Sync + 'static,
-    {
-        self.actor_builders.insert(
-            actor_type.to_string(),
-            Box::new(builder)
-        );
-    }
-}
+pub struct DefaultActorFactory;
 
 #[async_trait]
 impl ActorFactory for DefaultActorFactory {
-    fn create_actor(&self, actor_type: &str, config: &StepConfig) -> Result<Box<dyn Actor>, WorkflowError> {
-        if let Some(builder) = self.actor_builders.get(actor_type) {
-            Ok(builder(config))
-        } else {
-            Err(WorkflowError::UnknownActorType(actor_type.to_string()))
-        }
+    async fn create_source(&self, def: &SourceDefinition) -> Result<Box<dyn Actor>, WorkflowError> {
+        todo!("Implement source actor creation")
     }
 
-    fn create_system(&self) -> ActorSystem {
-        ActorSystem::new(self.system_config.clone())
+    async fn create_transform(&self, def: &TransformDefinition) -> Result<Box<dyn Actor>, WorkflowError> {
+        todo!("Implement transform actor creation")
+    }
+
+    async fn create_sink(&self, def: &SinkDefinition) -> Result<Box<dyn Actor>, WorkflowError> {
+        todo!("Implement sink actor creation")
     }
 } 

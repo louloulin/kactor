@@ -14,7 +14,7 @@ impl Default for SystemConfig {
     fn default() -> Self {
         Self {
             host: "127.0.0.1".to_string(),
-            port: 0, // 随机端口
+            port: 0,
             dispatcher: ThreadPoolDispatcher::new(num_cpus::get()),
             deadletter_timeout: Duration::from_secs(5),
             shutdown_timeout: Duration::from_secs(10),

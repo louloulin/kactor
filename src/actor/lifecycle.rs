@@ -1,6 +1,8 @@
 use std::time::Duration;
 use tokio::time::sleep;
 
+use super::Actor;
+
 pub struct ActorLifecycle {
     pub started_at: std::time::Instant,
     pub restart_count: u32,

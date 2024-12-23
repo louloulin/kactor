@@ -1,5 +1,7 @@
 use std::sync::Arc;
-use crate::{Actor, Middleware, SupervisorStrategy};
+use super::Actor;
+use crate::middleware::Middleware;
+use crate::supervisor::SupervisorStrategy;
 
 pub struct Props {
     // Actor 创建器

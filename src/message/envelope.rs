@@ -1,30 +1,32 @@
-use std::any::Any;
-use crate::{Message, MessageHeader, Pid};
+use super::Message;
+use crate::actor::ActorRef;
 
-pub struct MessageEnvelope {
+/// An envelope wraps a message with additional metadata
+pub struct Envelope {
+    /// The wrapped message
     pub message: Message,
-    pub sender: Option<Pid>,
-    pub header: Option<MessageHeader>,
-    pub target: Pid,
+    /// The target actor
+    pub target: ActorRef,
+    /// Whether this is a system message
+    pub system: bool,
 }
 
-impl MessageEnvelope {
-    pub fn new(message: Message, target: Pid) -> Self {
+impl Envelope {
+    /// Creates a new envelope
+    pub fn new(message: Message, target: ActorRef) -> Self {
         Self {
             message,
-            sender: None,
-            header: None,
             target,
+            system: false,
         }
     }
 
-    pub fn with_sender(mut self, sender: Pid) -> Self {
-        self.sender = Some(sender);
-        self
-    }
-
-    pub fn with_header(mut self, header: MessageHeader) -> Self {
-        self.header = Some(header);
-        self
+    /// Creates a new system message envelope
+    pub fn system(message: Message, target: ActorRef) -> Self {
+        Self {
+            message,
+            target,
+            system: true,
+        }
     }
 } 

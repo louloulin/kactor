@@ -1,10 +1,13 @@
 use async_trait::async_trait;
-use crate::{Actor, Context, Message};
+use futures::future::BoxFuture;
+use crate::context::Context;
+use crate::message::Message;
 use std::collections::HashSet;
+use super::{Actor, ActorRef};
 
 /// A simple actor that forwards messages to another actor
 pub struct ForwardActor {
-    target: Pid,
+    target: ActorRef,
 }
 
 #[async_trait]
@@ -44,7 +47,7 @@ impl<T: Send + 'static> Actor for BatchActor<T> {
 
 /// An actor that broadcasts messages to multiple targets
 pub struct BroadcastActor {
-    targets: HashSet<Pid>,
+    targets: HashSet<ActorRef>,
 }
 
 impl BroadcastActor {
@@ -54,12 +57,12 @@ impl BroadcastActor {
         }
     }
 
-    pub fn add_target(&mut self, pid: Pid) {
-        self.targets.insert(pid);
+    pub fn add_target(&mut self, target: ActorRef) {
+        self.targets.insert(target);
     }
 
-    pub fn remove_target(&mut self, pid: &Pid) {
-        self.targets.remove(pid);
+    pub fn remove_target(&mut self, target: &ActorRef) {
+        self.targets.remove(target);
     }
 }
 
@@ -74,7 +77,7 @@ impl Actor for BroadcastActor {
 
 /// An actor that filters messages based on a predicate
 pub struct FilterActor<T: Send + 'static> {
-    target: Pid,
+    target: ActorRef,
     predicate: Box<dyn Fn(&T) -> bool + Send + Sync>,
 }
 
@@ -91,7 +94,7 @@ impl<T: Send + 'static> Actor for FilterActor<T> {
 
 /// An actor that transforms messages before forwarding them
 pub struct TransformActor<T: Send + 'static, U: Send + 'static> {
-    target: Pid,
+    target: ActorRef,
     transform: Box<dyn Fn(T) -> U + Send + Sync>,
 }
 

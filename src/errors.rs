@@ -1,32 +1,39 @@
-use std::error::Error;
-use std::fmt;
+use thiserror::Error;
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum ProtoError {
-    SendError(SendError),
-    SpawnError(SpawnError),
+    #[error("Send error: {0}")]
+    SendError(#[from] SendError),
+    
+    #[error("Spawn error: {0}")]
+    SpawnError(#[from] SpawnError),
+    
+    #[error("System error: {0}")]
     SystemError(String),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Error)]
 pub enum SendError {
+    #[error("Dead letter")]
     DeadLetter,
+    
+    #[error("Mailbox full")]
     MailboxFull,
+    
+    #[error("System shutting down")]
     SystemShuttingDown,
-    ConnectionFailed,
-    SerializationError,
-    NoRemoteAvailable,
-    BatchProcessingError,
-    NoRoutee,
-    Other(String),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum SpawnError {
+    #[error("Actor panicked")]
     ActorPanicked,
+    
+    #[error("System shutting down")]
     SystemShuttingDown,
+    
+    #[error("Invalid props")]
     InvalidProps,
-    DuplicatePid,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -44,18 +51,34 @@ pub enum RouterError {
     RoutingFailed(String),
 }
 
-impl Error for ProtoError {}
-impl Error for SendError {}
-impl Error for SpawnError {}
+#[derive(Error, Debug)]
+pub enum WorkflowError {
+    #[error("IO error: {0}")]
+    Io(#[from] std::io::Error),
 
-impl fmt::Display for ProtoError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            ProtoError::SendError(e) => write!(f, "Send error: {:?}", e),
-            ProtoError::SpawnError(e) => write!(f, "Spawn error: {:?}", e),
-            ProtoError::SystemError(e) => write!(f, "System error: {}", e),
-        }
-    }
+    #[error("Serialization error: {0}")]
+    Serialization(#[from] bincode::Error),
+
+    #[error("YAML error: {0}")]
+    Yaml(#[from] serde_yaml::Error),
+
+    #[error("Node not found: {0}")]
+    NodeNotFound(String),
+
+    #[error("Invalid state")]
+    InvalidState,
+
+    #[error("Unknown actor type: {0}")]
+    UnknownActorType(String),
+
+    #[error("Workflow not found: {0}")]
+    NotFound(String),
+
+    #[error("Step failed: {0}")]
+    StepFailed(String),
+
+    #[error("Mailbox error: {0}")]
+    SendError(#[from] SendError),
 }
 
 impl From<RouterError> for SendError {
