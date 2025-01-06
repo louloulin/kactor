@@ -1,8 +1,11 @@
-use std::sync::Arc;
 use tokio::sync::mpsc;
 use crate::actor::{Actor, ActorRef};
 use crate::message::Message;
 use crate::errors::SendError;
+use std::sync::Arc;
+use crate::dispatcher::Dispatcher;
+use crate::supervision::SupervisorStrategy;
+use crate::mailbox::Mailbox;
 
 /// Context provides the Actor with information about its environment and methods to interact with the system
 pub struct Context {
@@ -20,12 +23,18 @@ pub struct Context {
 
 impl Context {
     /// Creates a new Context
-    pub fn new(self_ref: ActorRef, parent: Option<ActorRef>, sender: mpsc::Sender<Message>) -> Self {
+    pub fn new(
+        self_ref: ActorRef,
+        parent: Option<ActorRef>,
+        dispatcher: Arc<dyn Dispatcher>,
+        supervisor_strategy: Box<dyn SupervisorStrategy>,
+        mailbox: Mailbox,
+    ) -> Self {
         Self {
             self_ref,
             parent,
             children: Vec::new(),
-            sender,
+            sender: mailbox.sender(),
             stopping: false,
         }
     }

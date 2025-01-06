@@ -10,7 +10,8 @@ pub mod message;
 pub mod middleware;
 pub mod supervisor;
 pub mod system;
-
+pub mod props;
+pub mod supervision;
 // 远程处理模块
 pub mod remote;
 pub mod mailbox;
@@ -76,7 +77,6 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 // 特征重导出
 pub use async_trait::async_trait;
-
 
 // Re-exports
 pub use middleware::{Middleware, MiddlewareChain};

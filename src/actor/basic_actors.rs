@@ -107,6 +107,7 @@ impl<T: Send + 'static, U: Send + 'static> Actor for TransformActor<T, U> {
                 payload: Box::new(transformed),
                 sender: msg.sender,
                 header: msg.header,
+                priority: msg.priority,
             };
             ctx.send(&self.target, new_msg).await.ok();
         }

@@ -1,6 +1,7 @@
 use async_trait::async_trait;
 use std::time::Duration;
-use crate::{Actor, Context, SendError};
+use crate::context::Context;
+use crate::{SendError};
 
 #[async_trait]
 pub trait SupervisorStrategy: Send + Sync {

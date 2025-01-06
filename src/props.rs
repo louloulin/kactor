@@ -1,5 +1,10 @@
 use std::sync::Arc;
-use crate::{Actor, Context, Dispatcher, Mailbox, Pid, SendError, SupervisorStrategy};
+use crate::actor::{Actor, ActorRef, MockActor};
+use crate::context::Context;
+use crate::dispatcher::{Dispatcher, ThreadPoolDispatcher};
+use crate::mailbox::Mailbox;
+use crate::errors::SendError;
+use crate::supervision::{SupervisorStrategy, DefaultStrategy};
 
 pub struct Props {
     producer: Box<dyn Fn() -> Box<dyn Actor> + Send + Sync>,
@@ -36,20 +41,20 @@ impl Props {
         self
     }
 
-    pub fn spawn(&self, parent: Option<Pid>) -> Result<Pid, SendError> {
+    pub fn spawn(&self, parent: Option<ActorRef>) -> Result<ActorRef, SendError> {
         let actor = (self.producer)();
         let mailbox = Mailbox::new(self.mailbox_size);
         
         let context = Context::new(
-            actor,
+            ActorRef::new(),
             parent,
             self.dispatcher.clone(),
             self.supervisor_strategy.clone(),
             mailbox.clone(),
         );
 
-        let pid = Pid::new();
-        context.set_pid(pid.clone());
+        let actor_ref = ActorRef::new();
+        context.set_actor_ref(actor_ref.clone());
         
         // 启动 Actor
         self.dispatcher.schedule(async move {
@@ -58,6 +63,19 @@ impl Props {
             }
         });
 
-        Ok(pid)
+        Ok(actor_ref)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::actor::MockActor; // 假设有一个 MockActor 用于测试
+
+    #[tokio::test]
+    async fn test_props_spawn() {
+        let props = Props::new(|| Box::new(MockActor::new()));
+        let pid = props.spawn(None).unwrap();
+        assert!(pid.is_valid()); // 验证 PID 是否有效
     }
 } 

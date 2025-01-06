@@ -1,4 +1,3 @@
-use std::sync::Arc;
 use super::Actor;
 use crate::middleware::Middleware;
 use crate::supervisor::SupervisorStrategy;

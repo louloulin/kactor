@@ -1,3 +1,9 @@
+use crate::actor::Actor;
+use crate::props::Props;
+use crate::supervision::SupervisorStrategy;
+use crate::middleware::Middleware;
+use crate::dispatcher::Dispatcher;
+
 pub struct ActorBuilder<A: Actor> {
     props: Props<A>,
     supervisor: Option<Box<dyn SupervisorStrategy>>,
