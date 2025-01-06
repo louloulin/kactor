@@ -13,6 +13,7 @@ pub mod system;
 
 // 远程处理模块
 pub mod remote;
+pub mod mailbox;
 
 // 工作流模块
 pub mod workflow {

@@ -10,6 +10,7 @@ pub use batch::MessageBatch;
 pub use envelope::Envelope;
 pub use queue::MessageQueue;
 pub use system_message::SystemMessage;
+use crate::SendError;
 
 /// Represents a message that can be sent to an actor
 #[derive(Clone)]
@@ -20,6 +21,8 @@ pub struct Message {
     pub sender: Option<ActorRef>,
     /// Message headers/metadata
     pub header: Option<Box<dyn Any + Send>>,
+    /// The priority of the message (higher value means higher priority)
+    pub priority: u8,
 }
 
 impl Message {
@@ -29,6 +32,7 @@ impl Message {
             payload: Box::new(payload),
             sender: None,
             header: None,
+            priority: 0,
         }
     }
 
@@ -38,12 +42,28 @@ impl Message {
             payload: Box::new(payload),
             sender: Some(sender),
             header: None,
+            priority: 0,
         }
     }
 
     /// Creates a system stop message
     pub(crate) fn system_stop() -> Self {
         Self::new(SystemMessage::Stop)
+    }
+
+    /// Sends the message to the specified actor and handles potential errors
+    pub async fn send_to(&self, target: &ActorRef) -> Result<(), SendError> {
+        target.send(self.clone()).await.map_err(|_| SendError::MailboxFull)
+    }
+
+    /// Creates a new message with a specified priority
+    pub fn new_with_priority<T: Any + Send>(payload: T, priority: u8) -> Self {
+        Self {
+            payload: Box::new(payload),
+            sender: None,
+            header: None,
+            priority,
+        }
     }
 }
 

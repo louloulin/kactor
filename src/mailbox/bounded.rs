@@ -1,6 +1,7 @@
 use super::*;
 use tokio::sync::mpsc;
 use std::sync::RwLock;
+use std::time::Duration;
 
 pub struct BoundedMailbox {
     config: MailboxConfig,
@@ -111,5 +112,55 @@ impl Mailbox for BoundedMailbox {
 
     fn is_empty(&self) -> bool {
         self.len() == 0
+    }
+
+    fn dispatcher(&self) -> Arc<dyn MailboxDispatcher> {
+        Arc::clone(&self.config.dispatcher)
+    }
+
+    fn metrics(&self) -> Arc<MailboxMetrics> {
+        // Return metrics for this mailbox
+        Arc::new(MailboxMetrics::new()) // Adjust as needed
+    }
+
+    fn set_dispatcher(&mut self, dispatcher: Arc<dyn MailboxDispatcher>) {
+        self.config.dispatcher = dispatcher;
+    }
+
+    fn config(&self) -> &MailboxConfig {
+        &self.config
+    }
+
+    fn clear(&mut self) {
+        // Clear the mailbox
+        self.sender = mpsc::channel(self.config.capacity).0; // Reset the sender
+    }
+
+    fn stats(&self) -> MailboxStats {
+        MailboxStats {
+            messages_processed: 0, // Replace with actual stats
+            messages_queued: 0,    // Replace with actual stats
+            messages_dropped: 0,   // Replace with actual stats
+            avg_processing_time: Duration::new(0, 0), // Replace with actual stats
+            avg_queuing_time: Duration::new(0, 0),    // Replace with actual stats
+            errors: 0,             // Replace with actual stats
+            status_changes: 0,     // Replace with actual stats
+        }
+    }
+
+    fn set_config(&mut self, config: MailboxConfig) {
+        self.config = config;
+    }
+
+    async fn receive(&self) -> Result<Option<Message>, SendError> {
+        let receiver = self.receiver.read().unwrap();
+        if let Some(ref rx) = *receiver {
+            match rx.recv().await {
+                Some(msg) => Ok(Some(msg)),
+                None => Ok(None), // Channel closed
+            }
+        } else {
+            Err(SendError::MailboxClosed)
+        }
     }
 } 

@@ -1,6 +1,6 @@
 use super::*;
 use priority_queue::PriorityQueue;
-use std::sync::RwLock;
+use std::{sync::RwLock, time::Duration};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum MessagePriority {
@@ -129,5 +129,53 @@ impl Mailbox for PriorityMailbox {
 
     fn is_empty(&self) -> bool {
         self.queue.read().unwrap().is_empty()
+    }
+
+    fn dispatcher(&self) -> Arc<dyn MailboxDispatcher> {
+        Arc::clone(&self.config.dispatcher)
+    }
+
+    fn metrics(&self) -> Arc<MailboxMetrics> {
+        // Return metrics for this mailbox
+        Arc::new(MailboxMetrics::new()) // Adjust as needed
+    }
+
+    fn set_dispatcher(&mut self, dispatcher: Arc<dyn MailboxDispatcher>) {
+        self.config.dispatcher = dispatcher;
+    }
+
+    fn config(&self) -> &MailboxConfig {
+        &self.config
+    }
+
+    fn clear(&mut self) {
+        // Clear the mailbox
+        let mut queue = self.queue.write().unwrap();
+        queue.clear(); // Clear the priority queue
+    }
+
+    fn stats(&self) -> MailboxStats {
+        MailboxStats {
+            messages_processed: 0, // Replace with actual stats
+            messages_queued: 0,    // Replace with actual stats
+            messages_dropped: 0,   // Replace with actual stats
+            avg_processing_time: Duration::new(0, 0), // Replace with actual stats
+            avg_queuing_time: Duration::new(0, 0),    // Replace with actual stats
+            errors: 0,             // Replace with actual stats
+            status_changes: 0,     // Replace with actual stats
+        }
+    }
+
+    fn set_config(&mut self, config: MailboxConfig) {
+        self.config = config;
+    }
+
+    async fn receive(&self) -> Result<Option<Message>, SendError> {
+        let queue = self.queue.read().unwrap();
+        if let Some((msg, _)) = queue.peek() {
+            Ok(Some(msg.clone()))
+        } else {
+            Ok(None) // No messages available
+        }
     }
 } 

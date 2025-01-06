@@ -2,16 +2,22 @@ mod queue;
 mod priority;
 mod bounded;
 mod unbounded;
+mod dispatcher;
+mod metrics;
 
 pub use queue::*;
 pub use priority::*;
 pub use bounded::*;
 pub use unbounded::*;
+pub use dispatcher::*;
+pub use metrics::*;
 
 use std::sync::Arc;
 use tokio::sync::{mpsc, oneshot};
-use crate::{Actor, Context, Message, SystemMessage, SendError};
-use crate::mailbox::dispatcher::{MailboxDispatcher, DefaultDispatcher};
+use crate::actor::{Actor, ActorRef};
+use crate::context::Context;
+use crate::message::{Message, SystemMessage};
+use crate::errors::SendError;
 use crate::mailbox::metrics::{MailboxMetrics, MailboxStats};
 
 /// Mailbox 配置
