@@ -2,6 +2,7 @@ use std::sync::Arc;
 use tokio::sync::mpsc;
 use crate::message::Message;
 use crate::errors::SendError;
+use rand::Rng;
 
 /// ActorRef represents a reference to an actor that can receive messages
 #[derive(Clone)]
@@ -13,10 +14,10 @@ pub struct ActorRef {
 }
 
 impl ActorRef {
-    /// Creates a new ActorRef
-    pub fn new(id: impl Into<String>, sender: mpsc::Sender<Message>) -> Self {
+    /// Creates a new ActorRef with a specified ID
+    pub fn new(id: String, sender: mpsc::Sender<Message>) -> Self {
         Self {
-            id: id.into(),
+            id,
             sender: Arc::new(sender),
         }
     }
@@ -36,6 +37,18 @@ impl ActorRef {
         // Send stop message
         let stop_msg = Message::system_stop();
         let _ = self.send(stop_msg).await;
+    }
+
+    /// Default constructor for ActorRef
+    pub fn default() -> Self {
+        let random_id: String = rand::thread_rng()
+            .gen_range(1000..9999)
+            .to_string();
+        let (sender, _receiver) = mpsc::channel(100); // Specify a buffer size, e.g., 100
+        Self {
+            id: random_id,
+            sender: Arc::new(sender),
+        }
     }
 }
 
@@ -58,5 +71,18 @@ impl Eq for ActorRef {}
 impl std::hash::Hash for ActorRef {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.id.hash(state);
+    }
+}
+
+impl Default for ActorRef {
+    fn default() -> Self {
+        let random_id: String = rand::thread_rng()
+            .gen_range(1000..9999)
+            .to_string();
+        let (sender, _receiver) = mpsc::channel(100);
+        Self {
+            id: random_id,
+            sender: Arc::new(sender),
+        }
     }
 }

@@ -46,14 +46,14 @@ impl Props {
         let mailbox = Mailbox::new(self.mailbox_size);
         
         let context = Context::new(
-            ActorRef::new(),
+            ActorRef::default(),
             parent,
             self.dispatcher.clone(),
             self.supervisor_strategy.clone(),
             mailbox.clone(),
         );
 
-        let actor_ref = ActorRef::new();
+        let actor_ref = ActorRef::default();
         context.set_actor_ref(actor_ref.clone());
         
         // 启动 Actor
