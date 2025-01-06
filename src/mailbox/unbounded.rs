@@ -163,4 +163,36 @@ impl Mailbox for UnboundedMailbox {
             Err(SendError::MailboxClosed)
         }
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::mailbox::MailboxConfig;
+    use crate::message::Message;
+    use std::sync::Arc;
+
+    #[tokio::test]
+    async fn test_unbounded_mailbox_send_and_receive() {
+        let config = MailboxConfig::default();
+        let mailbox = UnboundedMailbox::new(config);
+        let msg = Message::new("Test message");
+
+        // Send a message
+        assert!(mailbox.send(msg.clone()).await.is_ok());
+
+        // Receive the message
+        let received_msg = mailbox.receive().await.unwrap();
+        assert_eq!(received_msg, Some(msg));
+    }
+
+    #[tokio::test]
+    async fn test_unbounded_mailbox_receive_empty() {
+        let config = MailboxConfig::default();
+        let mailbox = UnboundedMailbox::new(config);
+
+        // Try to receive a message when none have been sent
+        let received_msg = mailbox.receive().await.unwrap();
+        assert_eq!(received_msg, None);
+    }
 } 

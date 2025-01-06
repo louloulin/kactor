@@ -163,4 +163,43 @@ impl Mailbox for BoundedMailbox {
             Err(SendError::MailboxClosed)
         }
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::mailbox::MailboxConfig;
+    use crate::message::Message;
+    use std::sync::Arc;
+
+    #[tokio::test]
+    async fn test_bounded_mailbox_send_and_receive() {
+        let config = MailboxConfig::default();
+        let mailbox = BoundedMailbox::new(config);
+        let msg = Message::new("Test message");
+
+        // Send a message
+        assert!(mailbox.send(msg.clone()).await.is_ok());
+
+        // Receive the message
+        let received_msg = mailbox.receive().await.unwrap();
+        assert_eq!(received_msg, Some(msg));
+    }
+
+    #[tokio::test]
+    async fn test_bounded_mailbox_full() {
+        let config = MailboxConfig {
+            capacity: 1,
+            ..MailboxConfig::default()
+        };
+        let mailbox = BoundedMailbox::new(config);
+        let msg1 = Message::new("Message 1");
+        let msg2 = Message::new("Message 2");
+
+        // Send the first message
+        assert!(mailbox.send(msg1).await.is_ok());
+
+        // Try to send the second message, should fail
+        assert!(mailbox.send(msg2).await.is_err());
+    }
 } 
